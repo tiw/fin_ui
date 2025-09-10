@@ -38,6 +38,61 @@ export async function loadStockData(symbol: string): Promise<PriceData[]> {
   }
 }
 
+export async function loadVolumeData(symbol: string): Promise<{date: Date, volume: number}[]> {
+  try {
+    const response = await fetch(`/stock_data/${symbol}_volume_data.csv`);
+    if (!response.ok) {
+      throw new Error(`Failed to load ${symbol} volume data`);
+    }
+    const csvContent = await response.text();
+    const lines = csvContent.trim().split('\n');
+    
+    // Handle the format: ,volume\n2015-09-14,58363431.0
+    const volumeData = lines.slice(1).map(line => {
+      const values = line.split(',');
+      return {
+        date: new Date(values[0]),
+        volume: parseFloat(values[1])
+      };
+    }).filter(data => !isNaN(data.volume));
+    
+    return volumeData;
+  } catch (error) {
+    console.error(`Error loading ${symbol} volume data:`, error);
+    return [];
+  }
+}
+
+export async function loadStockDataWithVolume(symbol: string): Promise<PriceData[]> {
+  try {
+    // Just load the price data - it already contains volume information
+    const priceData = await loadStockData(symbol);
+
+    console.log(`Loading data for ${symbol}:`);
+    console.log(`Price data points: ${priceData.length}`);
+
+    // Log statistics about volume data
+    const volumeCount = priceData.filter(d => d.volume && d.volume > 0).length;
+    console.log(`Data points with volume: ${volumeCount} out of ${priceData.length}`);
+
+    if (volumeCount > 0) {
+      const volumes = priceData.filter(d => d.volume).map(d => d.volume!);
+      const minVol = Math.min(...volumes);
+      const maxVol = Math.max(...volumes);
+      console.log(`Volume range: ${minVol.toLocaleString()} - ${maxVol.toLocaleString()}`);
+      console.log(`Sample data with volume:`);
+      priceData.slice(0, 3).forEach(d => {
+        console.log(`  ${d.date.toISOString().split('T')[0]}: volume=${d.volume?.toLocaleString()}`);
+      });
+    }
+
+    return priceData;
+  } catch (error) {
+    console.error(`Error loading ${symbol} data with volume:`, error);
+    return [];
+  }
+}
+
 export function getAvailableStocks(): string[] {
   return ['AAPL', 'AMZN', 'GOOGL', 'META', 'MSFT', 'NVDA', 'TSLA'];
 }

@@ -166,7 +166,7 @@ import { ref, computed, watch } from 'vue';
 import { CandlestickChart, LineChart, TradingChart, Button, Card } from '../src';
 import { generateRandomPriceData, calculateSMA, calculateRSI, calculateMACD } from '../src/utils';
 import { renderVolumeCircles, renderPriceCircles, renderCombinedCircles } from '../src/utils/pointRenderers';
-import { loadStockData, getAvailableStocks, getStockName } from '../src/utils/stockData';
+import { loadStockDataWithVolume, getAvailableStocks, getStockName } from '../src/utils/stockData';
 import { themes } from '../src/lib/themes';
 interface PriceData {
   date: Date;
@@ -182,7 +182,7 @@ const showVolume = ref(true);
 const showGrid = ref(true);
 const hoveredData = ref<any>(null);
 const activeIndicators = ref<string[]>([]);
-const pointRendererType = ref('default');
+const pointRendererType = ref('volume-circles');
 const selectedStock = ref('AAPL');
 const isLoading = ref(false);
 
@@ -208,11 +208,22 @@ const chartData = ref<PriceData[]>([]);
 const loadSelectedStockData = async () => {
   isLoading.value = true;
   try {
-    const data = await loadStockData(selectedStock.value);
+    const data = await loadStockDataWithVolume(selectedStock.value);
     // Sort by date and take last 200 data points for better visualization
     chartData.value = data
       .sort((a, b) => a.date.getTime() - b.date.getTime())
       .slice(-200);
+    
+    console.log(`Loaded ${data.length} data points for ${selectedStock.value}`);
+    const volumeCount = data.filter(d => d.volume && d.volume > 0).length;
+    console.log(`Volume data available for ${volumeCount} points`);
+    
+    if (volumeCount > 0) {
+      const volumes = data.filter(d => d.volume).map(d => d.volume!);
+      const minVol = Math.min(...volumes);
+      const maxVol = Math.max(...volumes);
+      console.log(`Volume range: ${minVol.toLocaleString()} - ${maxVol.toLocaleString()}`);
+    }
   } catch (error) {
     console.error('Error loading stock data:', error);
     // Fallback to generated data

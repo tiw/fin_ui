@@ -22,39 +22,61 @@ export function renderVolumeCircles(selection: any, chartContext: ChartContext) 
   // Filter data that has volume information
   const dataWithVolume = chartContext.data.filter(d => d.volume && d.volume > 0);
   
-  if (dataWithVolume.length === 0) return;
+  console.log(`Volume Circles: Processing ${dataWithVolume.length} data points with volume out of ${chartContext.data.length} total`);
+  
+  if (dataWithVolume.length === 0) {
+    console.log('No volume data available for rendering circles');
+    return;
+  }
 
-  // Calculate volume scale
+  // Calculate volume statistics
+  const volumes = dataWithVolume.map(d => d.volume!);
+  const volumeExtent = d3.extent(volumes);
+  
+  console.log(`Volume range: ${volumeExtent[0]?.toLocaleString()} - ${volumeExtent[1]?.toLocaleString()}`);
+
+  // Calculate max radius based on chart dimensions
   const maxRadius = Math.min(chartContext.width, chartContext.height) * 0.04; // 4% of chart size
-  const volumeExtent = d3.extent(dataWithVolume, d => d.volume!);
   
   // Use square root scale for accurate area representation
   const radiusScale = d3.scaleSqrt()
-    .domain([0, volumeExtent[1]])
-    .range([0, maxRadius]);
+    .domain([volumeExtent[0] || 0, volumeExtent[1] || 1])
+    .range([3, maxRadius]); // Minimum radius of 3px for visibility
 
   // Color scale based on price movement
   const colorScale = (d: PriceData) => {
     return d.close >= d.open ? chartContext.theme.upColor : chartContext.theme.downColor;
   };
 
+  console.log(`Radius scale: ${volumeExtent[0]?.toLocaleString()} -> 3px, ${volumeExtent[1]?.toLocaleString()} -> ${maxRadius.toFixed(1)}px`);
+
   selection.each(function(d: PriceData) {
     const g = d3.select(this);
     g.selectAll('*').remove(); // Clear existing content
 
     if (d.volume && d.volume > 0) {
-      // Add circle with radius based on volume
+      const radius = radiusScale(d.volume);
+      
+      console.log(`Rendering circle for ${d.date.toDateString()}: volume=${d.volume.toLocaleString()}, radius=${radius.toFixed(1)}px`);
+      
+      // Main circle based on volume
       g.append('circle')
-        .attr('r', radiusScale(d.volume))
+        .attr('r', radius)
         .attr('fill', colorScale(d))
         .attr('fill-opacity', 0.6)
         .attr('stroke', 'white')
         .attr('stroke-width', 1);
 
-      // Add smaller center circle for better visibility
+      // Inner circle for better definition
       g.append('circle')
-        .attr('r', Math.max(1, radiusScale(d.volume) * 0.3))
+        .attr('r', Math.max(1, radius * 0.3))
         .attr('fill', 'white')
+        .attr('fill-opacity', 0.9);
+    } else {
+      // Fallback small circle for data points without volume
+      g.append('circle')
+        .attr('r', 2)
+        .attr('fill', colorScale(d))
         .attr('fill-opacity', 0.8);
     }
   });

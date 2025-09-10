@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Volume Circles Test</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .volume-circle {
+            transition: all 0.3s ease;
+        }
+        .volume-circle:hover {
+            stroke-width: 2;
+        }
+        .info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e8f4fd;
+            border-radius: 5px;
+            border-left: 4px solid #2196F3;
+        }
+    </style>
+</head>
+<body>
+    <div class="chart-container">
+        <h1>Volume Circles Test</h1>
+        <p>This page tests the volume circles rendering with real stock data.</p>
+        
+        <div id="chart"></div>
+        
+        <div class="info">
+            <h3>Volume Circle Information:</h3>
+            <ul>
+                <li>Circle size represents trading volume</li>
+                <li>Color represents price movement (green = up, red = down)</li>
+                <li>Area is proportional to volume (using square root scale)</li>
+                <li>Hover over circles to see details</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Load and test volume data
+        async function loadVolumeData() {
+            try {
+                const response = await fetch('/stock_data/AAPL_volume_data.csv');
+                const csvText = await response.text();
+                
+                // Parse CSV
+                const lines = csvText.trim().split('\n');
+                const volumeData = lines.slice(1).map(line => {
+                    const [date, volume] = line.split(',');
+                    return {
+                        date: new Date(date),
+                        volume: parseFloat(volume)
+                    };
+                });
+
+                console.log('Volume data loaded:', volumeData.length, 'records');
+                
+                // Calculate statistics
+                const volumes = volumeData.map(d => d.volume);
+                const minVol = Math.min(...volumes);
+                const maxVol = Math.max(...volumes);
+                const meanVol = volumes.reduce((a, b) => a + b, 0) / volumes.length;
+                
+                console.log('Volume Statistics:');
+                console.log('Min:', minVol.toLocaleString());
+                console.log('Max:', maxVol.toLocaleString());
+                console.log('Mean:', meanVol.toLocaleString());
+                console.log('Range:', (maxVol - minVol).toLocaleString());
+
+                // Create sample visualization
+                createVolumeVisualization(volumeData.slice(-50)); // Show last 50 days
+                
+            } catch (error) {
+                console.error('Error loading volume data:', error);
+                document.getElementById('chart').innerHTML = '<p style="color: red;">Error loading volume data. Make sure the server is running on port 5173.</p>';
+            }
+        }
+
+        function createVolumeVisualization(data) {
+            const width = 800;
+            const height = 400;
+            const margin = { top: 20, right: 20, bottom: 40, left: 60 };
+
+            // Clear previous chart
+            d3.select('#chart').selectAll('*').remove();
+
+            const svg = d3.select('#chart')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            // Create scales
+            const xScale = d3.scaleTime()
+                .domain(d3.extent(data, d => d.date))
+                .range([0, chartWidth]);
+
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.volume)])
+                .range([chartHeight, 0]);
+
+            // Calculate circle sizes based on volume
+            const maxRadius = Math.min(chartWidth, chartHeight) * 0.03;
+            const radiusScale = d3.scaleSqrt()
+                .domain([d3.min(data, d => d.volume), d3.max(data, d => d.volume)])
+                .range([2, maxRadius]);
+
+            // Add axes
+            g.append('g')
+                .attr('transform', `translate(0,${chartHeight})`)
+                .call(d3.axisBottom(xScale));
+
+            g.append('g')
+                .call(d3.axisLeft(yScale));
+
+            // Add volume bars for reference
+            const barWidth = chartWidth / data.length * 0.8;
+            
+            g.selectAll('.volume-bar')
+                .data(data)
+                .enter()
+                .append('rect')
+                .attr('class', 'volume-bar')
+                .attr('x', d => xScale(d.date) - barWidth / 2)
+                .attr('y', d => yScale(d.volume))
+                .attr('width', barWidth)
+                .attr('height', d => chartHeight - yScale(d.volume))
+                .attr('fill', '#e0e0e0')
+                .attr('opacity', 0.6);
+
+            // Add volume circles
+            const circles = g.selectAll('.volume-circle')
+                .data(data)
+                .enter()
+                .append('g')
+                .attr('class', 'volume-circle')
+                .attr('transform', d => `translate(${xScale(d.date)},${chartHeight / 2})`);
+
+            circles.append('circle')
+                .attr('r', d => radiusScale(d.volume))
+                .attr('fill', '#2196F3')
+                .attr('fill-opacity', 0.4)
+                .attr('stroke', '#2196F3')
+                .attr('stroke-width', 1);
+
+            circles.append('circle')
+                .attr('r', d => Math.max(1, radiusScale(d.volume) * 0.3))
+                .attr('fill', '#2196F3')
+                .attr('fill-opacity', 0.8);
+
+            // Add tooltips
+            circles.append('title')
+                .text(d => `Date: ${d.date.toLocaleDateString()}\nVolume: ${d.volume.toLocaleString()}`);
+
+            // Add labels
+            svg.append('text')
+                .attr('x', width / 2)
+                .attr('y', height - 5)
+                .attr('text-anchor', 'middle')
+                .text('Date');
+
+            svg.append('text')
+                .attr('transform', 'rotate(-90)')
+                .attr('x', -height / 2)
+                .attr('y', 15)
+                .attr('text-anchor', 'middle')
+                .text('Volume');
+
+            // Add legend
+            const legendData = [
+                { volume: d3.min(data, d => d.volume), label: 'Min Volume' },
+                { volume: d3.max(data, d => d.volume), label: 'Max Volume' }
+            ];
+
+            const legend = svg.append('g')
+                .attr('transform', `translate(${width - 150}, 30)`);
+
+            legendData.forEach((item, i) => {
+                const legendRow = legend.append('g')
+                    .attr('transform', `translate(0, ${i * 25})`);
+
+                legendRow.append('circle')
+                    .attr('r', radiusScale(item.volume))
+                    .attr('fill', '#2196F3')
+                    .attr('fill-opacity', 0.4)
+                    .attr('stroke', '#2196F3');
+
+                legendRow.append('text')
+                    .attr('x', 20)
+                    .attr('y', 5)
+                    .text(`${item.label}: ${item.volume.toLocaleString()}`)
+                    .style('font-size', '12px');
+            });
+
+            console.log('Volume visualization created with', data.length, 'data points');
+        }
+
+        // Load data when page loads
+        window.addEventListener('load', loadVolumeData);
+    </script>
+</body>
+</html>
